@@ -1,0 +1,36 @@
+
+model {
+
+for (t in 1:totT) {
+     X[t] <- pow(phi,t)*pow(1-p, t-1)*p
+# for unmarked p is counted below     
+#     Xu[t] <- pow(phiu,t)*pow(1-p, t-1)
+}
+
+Xu[1] <- 1
+for (t in 2:totT) {
+  Xu[t] <- 1-p*Xu[t-1]
+}
+
+theta <- sum(X[])
+thetau <- sum(Xu[])
+Ncapt ~ dpois(theta* N)
+#Ut <- round(Nu*Xu)
+
+for (i in 1:totT) {
+  Ut[i] ~ dpois(U*Xu[i])
+}
+
+Y ~ dmulti(X, Ncapt)
+
+for (i in 1:totT) {  
+  Yu[i] ~ dbin(p, Ut[i])
+}
+#priors
+
+Nu ~ dgamma(0.001, 0.001)
+p ~ dbeta(2,2)
+phi ~ dbeta(4,2)
+
+U <- Nu
+}

@@ -1,0 +1,647 @@
+
+R version 3.1.2 (2014-10-31) -- "Pumpkin Helmet"
+Copyright (C) 2014 The R Foundation for Statistical Computing
+Platform: x86_64-unknown-linux-gnu (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> # Author: Daniel Villela
+> # Bayesian models for mosquito capture recapture experiments
+> # Description:  Simulation code
+> 
+> library("parallel")
+> 
+> set.seed(63434)
+> filename <- "./results20151209a.RData"
+> 
+> simul <- function(X) {
++ 
++   #Simul1
++   
++   J <- X$J
++   
++   dloc <- data.frame(trap=factor(1:J))
++   
++   b <- X$b
++   U <- X$U
++   N <- X$N
++   phis <- X$phis
++   phius <- X$phius
++   p <- X$p
++   
++   #number of squares
++   area <- X$area
++   #area of each square
++   iarea <- X$iarea
++   
++   totT <- X$totT
++   
++   total_pupas <- X$total_pupas
++   fa <- J*100/(area*iarea)
++   
++   captv<- Ut <- bt <- rep(0, totT)
++   captm <- Nt <- rep(0,totT)
++   
++   Ut[1] <- U*phius
++   bt[1] <- phius
++   captv[1] <- rbinom(1, rpois(1,Ut[1]+b*bt[1]), p)
++   
++   Nt[1] <- rpois(1,N*phis)
++   captm[1] <- rbinom(1, Nt[1], p)
++   for (t in 2:totT) {
++     #Ut[t] <- Ut[t-1]*phius
++     #bt[t] <- bt[t-1] + (phius^t)*(1-p)^(t-1)
++     Ut[t] <- rpois(1, Ut[t-1]*phius) + rpois(1, b) - captv[t-1]
++     #captv[t] <- rbinom(1, rpois(1,Ut[t]+ b*bt[t]), p)
++     captv[t] <- rbinom(1, Ut[t], p)
++     
++     Nt[t] <- rpois(1,(Nt[t-1]-captm[t-1])*phis)
++     captm[t] <- rbinom(1, Nt[t], p)
++   }
++   
++   Ydf <- data.frame(freq = captm, type="marked")
++   Yudf <- data.frame(freq = captv, type="unmarked")
++   
++ #  source("./run_jags_capt_m_more_v2.R")
++ 
++ 
++ nthin<-4
++ nc <- 3
++ nb <- 320000
++ ni <- 360000
++ 
++ Y <- Ydf$freq
++ Yu <- Yudf$freq
++ 
++ J <- length(levels(dloc$trap))
++ total_houses <- 787.0
++ fh <- J/total_houses
++ 
++ # following focks method
++ #total_pupas <- total_pupas*.5/2
++ 
++ fa <- J*100/(area*iarea)
++ #no google earth deu 82567 m2
++ 
++ data <- list ("totT"=totT, "Y"=Ydf$freq, "Yu"=Yudf$freq, "N"=N, 
++               "Ncapt"=sum(Ydf$freq), "Ucapt"=sum(Yudf$freq), "b"=round(total_pupas/fa))
++ data <- list ("totT"=totT, "Y"=Ydf$freq, "Yu"=Yudf$freq, "N"=N, 
++               "fa"=fa, "totpup" = total_pupas,              
++               "Ncapt"=sum(Ydf$freq), "Ucapt"=sum(Yudf$freq))
++ 
++ #data <- list ("totT"=totT, "Y"=Ydf$freq, "Yu"=Yudf$freq, "N"=N, 
++ #              "Ncapt"=sum(Ydf$freq), "Ucapt"=sum(Yudf$freq), "totpup"=total_pupas, "fa"=fa)
++ 
++ pt <- rep(0,totT)
++ xt <- rep(0,totT)
++ pt[1] <- .9
++ xt[1] <- .9
++ for (i in 2:totT) {
++   pt[i] <- pt[i-1] + (.9^i)*((1-.05)^(i-1))
++   xt[i] <- (.9^i)*((1-.05)^(i-1))
++ }
++ 
++ 
++ # Buona
++ inits <- function(){
++   list("p"=c(0.05), "phi"=c(0.5), "Nu" = 4000  )  
++ }
++ 
++ #parameters <- c( "f", "w", "p.a", "mu", "prec")
++ parameters <- c( "phi", "p", "U", "theta")
++ # Load interface package and start WinBUGS (note: this takes about 4.5 h)
++ library("R2jags")
++ 
++ wbout_buona <- jags (data, inits, parameters, model.file="model_buona.bug", n.thin=nthin, n.chains=nc, n.burnin=nb, n.iter=ni, working.dir=getwd())
++ 
++ 
++ inits <- function(){
++   list("p"=c(0.05), "phi"=c(0.5), "phiu"=c(0.9), "Nu" = 4000, 
++        "l"=800, "Yyu"= round(1000*xt), "bu"=round(100*pt))
++ }
++ inits <- function(){
++   list("p"=c(0.05), "phi"=c(0.5), "Nu" = 4000, 
++        "l"=800, "Yyu"= round(1000*xt), "bu"=round(100*pt))
++ }
++ 
++ #parameters <- c( "f", "w", "p.a", "mu", "prec")
++ parameters <- c( "phiu", "phi", "p", "U", "theta", "Nu", "l", "f", "b")
++ # Load interface package and start WinBUGS (note: this takes about 4.5 h)
++ library("R2jags")
++         
++         cat("Rwbout")
++ wbout <- jags (data, inits, parameters, model.file="model_capt_v8_recruit.bug", n.thin=nthin, n.chains=nc, n.burnin=nb, n.iter=ni, working.dir=getwd())
++ 
++ data <- list ("totT"=totT, "Y"=Ydf$freq, "Yu"=Yudf$freq, "N"=N, 
++               "fa"=fa, "totpup" = round(total_pupas/(4/3)),              
++               "Ncapt"=sum(Ydf$freq), "Ucapt"=sum(Yudf$freq))
++ cat("Rwbout34")
++ wbout_34 <- jags (data, inits, parameters, model.file="model_capt_v8_recruit.bug", n.thin=nthin, n.chains=nc, n.burnin=nb, n.iter=ni, working.dir=getwd())
++ 
++ data <- list ("totT"=totT, "Y"=Ydf$freq, "Yu"=Yudf$freq, "N"=N, 
++               "fa"=fa, "totpup" = round(total_pupas/2),              
++               "Ncapt"=sum(Ydf$freq), "Ucapt"=sum(Yudf$freq))
++ cat("Rwbout24")
++ wbout_24 <- jags (data, inits, parameters, model.file="model_capt_v8_recruit.bug", n.thin=nthin, n.chains=nc, n.burnin=nb, n.iter=ni, working.dir=getwd())
++ 
++ data <- list ("totT"=totT, "Y"=Ydf$freq, "Yu"=Yudf$freq, "N"=N, 
++               "fa"=fa, "totpup" = round(total_pupas/4),              
++               "Ncapt"=sum(Ydf$freq), "Ucapt"=sum(Yudf$freq))
++ cat("Rwbout14")
++ wbout_14 <- jags (data, inits, parameters, model.file="model_capt_v8_recruit.bug", n.thin=nthin, n.chains=nc, n.burnin=nb, n.iter=ni, working.dir=getwd())
++ 
++ cat("Rwbout same surv")
++ parameters <- c("phi", "p", "U", "theta", "Nu", "l")
++ wbout_samesurv <- jags (data, inits, parameters, model.file="model_capt_v6_recruit_samesurv.bug", n.thin=nthin, n.chains=nc, n.burnin=nb, n.iter=ni, working.dir=getwd())
++ 
++ 
++ data <- list ("totT"=totT, "Y"=Ydf$freq, "Yu"=Yudf$freq, "N"=N, 
++               "Ncapt"=sum(Ydf$freq), "Ucapt"=sum(Yudf$freq), "b"=round(total_pupas/fa))
++ 
++ inits <- function(){
++ 
++   #list("p"=c(0.05), "l" = .4, "v"=30000, "U"=10000)
++   list("p"=c(0.05), "v"=30000, "phi"=.8)
++ }
++ #parameters <- c( "f", "w", "p.a", "mu", "prec")
++ parameters <- c("p", "U", "theta", "phi")
++ 
++ wboutfish <- jags (data, inits, parameters, model.file="fisher_upois_v2.bug", n.thin=nthin, n.chains=nc, n.burnin=nb, n.iter=ni, working.dir=getwd())
++ 
++ data <- list ("totT"=totT, "Y"=Ydf$freq, "Yu"=Yudf$freq, "N"=N, 
++               "Ncapt"=sum(Ydf$freq), "Ucapt"=sum(Yudf$freq), "b"=round(total_pupas/fa), "phi"=.8)
++ 
++ inits <- function(){
++   
++ #  list("p"=c(0.05), "l" = .4, "v"=30000, "U"=10000)
++ #  list("p"=c(0.05))
++ list("p"=c(0.05), "v"=30000)
++ }
++ #parameters <- c( "f", "w", "p.a", "mu", "prec")
++ parameters <- c("p", "U", "theta")
++ 
++ #wboutlinc <- jags (data, inits, parameters, model.file="lincoln.bug", n.thin=nthin, n.chains=nc, n.burnin=nb, n.iter=ni, working.dir=getwd())
++ 
++ wboutlinc2 <- jags (data, inits, parameters, model.file="lincoln_upois_v2.bug", n.thin=nthin, n.chains=nc, n.burnin=nb, n.iter=ni, working.dir=getwd())
++ 
++   
++   list(wbout=wbout, wbout34=wbout_34, 
++                    wbout24=wbout_24, wbout14=wbout_14,
++                    wbout_samesurv=wbout_samesurv, 
++        wbuona=wbout_buona, fisher=wboutfish,
++                    lincoln=wboutlinc2, U=U, M=N, phis=phis,
++                    phius=phius, b=b, p=p, 
++        total_pupas=total_pupas, J=J, area=area, iarea=iarea)
++   
++ }
+> 
+> dfsimul1 <- data.frame(
++   J=64, b=600, U=4000, N=2000, phis = .78, phius = .85, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++   )
+> 
+> ### Simul2
+> # M=1000
+> # U = 4000
+> 
+> dfsimul2 <- data.frame(
++   J=64, b=600, U=4000, N=1000, phis = .78, phius = .85, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> 
+> #results <- c(results1, results2)
+> 
+> ### Simul3
+> #
+> # p=0.03
+> 
+> dfsimul3 <- data.frame(
++   J=64, b=600, U=4000, N=2000, phis = .78, phius = .85, p=.03,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> 
+> ### Simul4
+> # M = 500
+> # p=0.05
+> 
+> dfsimul4 <- data.frame(
++   J=64, b=600, U=4000, N=500, phis = .78, phius = .85, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> 
+> ### Simul5
+> # M = 3000
+> # p=0.05
+> 
+> dfsimul5 <- data.frame(
++   J=64, b=600, U=4000, N=3000, phis = .78, phius = .85, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> 
+> ### Simul6
+> # M = 4000
+> # p=0.05
+> 
+> cat("Simul6\n")
+Simul6
+> 
+> dfsimul6 <- data.frame(
++   J=64, b=600, U=4000, N=4000, phis = .78, phius = .85, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> 
+> ### Simul7
+> # M = 2000
+> # U = 2000
+> # p=0.05
+> 
+> cat("Simul7\n")
+Simul7
+> 
+> dfsimul7 <- data.frame(
++   J=64, b=600, U=2000, N=2000, phis = .78, phius = .85, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> 
+> ### Simul8
+> # M = 2000
+> # U = 6000
+> # p=0.05
+> 
+> dfsimul8 <- data.frame(
++   J=64, b=600, U=6000, N=2000, phis = .78, phius = .85, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> 
+> ### Simul9
+> # M = 2000
+> # U = 8000
+> # p=0.05
+> 
+> dfsimul9 <- data.frame(
++   J=64, b=600, U=8000, N=2000, phis = .78, phius = .85, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> 
+> ### Simul10
+> # M = 2000
+> # U = 4000
+> # p=0.05
+> # phius = .8
+> 
+> dfsimul10 <- data.frame(
++   J=64, b=600, U=4000, N=2000, phis = .78, phius = .8, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> 
+> ### Simul11
+> # M = 200
+> # U = 4000
+> # p=0.05
+> # phius = .8
+> 
+> dfsimul11 <- data.frame(
++   J=64, b=600, U=4000, N=200, phis = .78, phius = .85, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> 
+> ### Simul12
+> # M = 200
+> # U = 4000
+> # p=0.05
+> # phius = .8
+> 
+> dfsimul12 <- data.frame(
++   J=64, b=600, U=4000, N=300, phis = .78, phius = .85, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> 
+> ### Simul13
+> # M = 200
+> # U = 4000
+> # p=0.05
+> # phius = .8
+> 
+> cat("Simul13\n")
+Simul13
+> 
+> dfsimul13 <- data.frame(
++   J=64, b=600, U=4000, N=400, phis = .78, phius = .85, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> 
+> ### Simul14
+> # M = 200
+> # U = 4000
+> # p=0.05
+> # phius = .8
+> 
+> dfsimul14 <- data.frame(
++   J=64, b=600, U=10000, N=2000, phis = .78, phius = .85, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> 
+> ### Simul3
+> #
+> # p=0.03
+> 
+> dfsimul15 <- data.frame(
++   J=64, b=600, U=4000, N=2000, phis = .78, phius = .85, p=.04,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> 
+> 
+> ### Simul3
+> #
+> # p=0.03
+> 
+> dfsimul16 <- data.frame(
++   J=64, b=600, U=4000, N=2000, phis = .78, phius = .85, p=.08,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> 
+> ### Simul3
+> #
+> # p=0.03
+> 
+> dfsimul17 <- data.frame(
++   J=64, b=600, U=4000, N=2000, phis = .78, phius = .85, p=.10,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> 
+> ### Simul18
+> # M = 2000
+> # U = 4000
+> # p=0.05
+> # phius = .8
+> 
+> dfsimul18 <- data.frame(
++   J=64, b=600, U=4000, N=2000, phis = .8, phius = .8, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> 
+> 
+> ### Simul19
+> # M = 2000
+> # U = 4000
+> # p=0.05
+> # phius = .8
+> 
+> dfsimul19 <- data.frame(
++   J=64, b=600, U=4000, N=2000, phis = .85, phius = .78, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 250
++ )
+> 
+> dfsimul20 <- data.frame(
++   J=64, b=600, U=12000, N=2000, phis = .78, phius = .85, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> dfsimul21 <- data.frame(
++   J=64, b=600, U=14000, N=2000, phis = .78, phius = .85, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> dfsimul22 <- data.frame(
++   J=64, b=600, U=4000, N=3000, phis = .8, phius = .8, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> dfsimul23 <- data.frame(
++   J=64, b=600, U=4000, N=4000, phis = .8, phius = .8, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> dfsimul24 <- data.frame(
++   J=64, b=600, U=4000, N=3000, phis = .85, phius = .78, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> dfsimul25 <- data.frame(
++   J=64, b=600, U=4000, N=4000, phis = .85, phius = .78, p=.05,
++   area = 4931, iarea = 3.93*4.73, totT = 10, total_pupas = 167
++ )
+> 
+> 
+> start.time <- Sys.time()
+> 
+> lsimul <- list(
++   dfsimul1, dfsimul4, dfsimul2, dfsimul3, dfsimul5,
++   dfsimul6, dfsimul7, dfsimul9, dfsimul8, dfsimul10,
++   dfsimul11, dfsimul12, dfsimul13, dfsimul14, dfsimul15,
++   dfsimul16, dfsimul17, dfsimul18, dfsimul19,
++   dfsimul20, dfsimul21, dfsimul22, dfsimul23,
++   dfsimul24, dfsimul25
++   )
+> 
+> ncor <- 8              
+> 
+> # if the number of cores in the machine is less than the chosen value
+> ncor <- min(detectCores(), ncor)              
+> 
+> results <- mclapply(lsimul, simul, mc.cores=ncor)
+Loading required package: rjags
+Loading required package: rjags
+Loading required package: rjags
+Loading required package: rjags
+Loading required package: rjags
+Loading required package: rjags
+Loading required package: rjags
+Loading required package: rjags
+Loading required package: coda
+Loading required package: coda
+Loading required package: coda
+Loading required package: coda
+Loading required package: coda
+Loading required package: coda
+Loading required package: coda
+Loading required package: coda
+Linked to JAGS 4.2.0
+Linked to JAGS 4.2.0
+Linked to JAGS 4.2.0
+Loaded modules: basemod,bugs
+Loaded modules: basemod,bugs
+Loaded modules: basemod,bugs
+Linked to JAGS 4.2.0
+Linked to JAGS 4.2.0
+Linked to JAGS 4.2.0
+Loaded modules: basemod,bugs
+Loaded modules: basemod,bugs
+Loaded modules: basemod,bugs
+Linked to JAGS 4.2.0
+Linked to JAGS 4.2.0
+Loaded modules: basemod,bugs
+Loaded modules: basemod,bugs
+
+Attaching package: ‘R2jags’
+
+
+Attaching package: ‘R2jags’
+
+
+Attaching package: ‘R2jags’
+
+The following object is masked from ‘package:coda’:
+
+    traceplot
+
+The following object is masked from ‘package:coda’:
+
+    traceplot
+
+The following object is masked from ‘package:coda’:
+
+    traceplot
+
+
+Attaching package: ‘R2jags’
+
+
+Attaching package: ‘R2jags’
+
+
+Attaching package: ‘R2jags’
+
+
+Attaching package: ‘R2jags’
+
+
+Attaching package: ‘R2jags’
+
+The following object is masked from ‘package:coda’:
+
+    traceplot
+
+The following object is masked from ‘package:coda’:
+
+    traceplot
+
+The following object is masked from ‘package:coda’:
+
+    traceplot
+
+The following object is masked from ‘package:coda’:
+
+    traceplot
+
+The following object is masked from ‘package:coda’:
+
+    traceplot
+
+module glm loaded
+module glm loaded
+module glm loaded
+Compiling model graph
+   Resolving undeclared variables
+   Allocating nodes
+Graph information:
+   Observed stochastic nodes: 12
+   Unobserved stochastic nodes: 13
+   Total graph size: 166
+
+Compiling model graph
+   Resolving undeclared variables
+   Allocating nodes
+Graph information:
+   Observed stochastic nodes: 12
+   Unobserved stochastic nodes: 13
+   Total graph size: 166
+
+Compiling model graph
+   Resolving undeclared variables
+   Allocating nodes
+Graph information:
+   Observed stochastic nodes: 12
+   Unobserved stochastic nodes: 13
+   Total graph size: 166
+
+Initializing model
+
+Initializing model
+
+Initializing model
+
+module glm loaded
+module glm loaded
+module glm loaded
+module glm loaded
+module glm loaded
+Compiling model graph
+   Resolving undeclared variables
+   Allocating nodes
+Graph information:
+   Observed stochastic nodes: 12
+   Unobserved stochastic nodes: 13
+   Total graph size: 166
+
+Compiling model graph
+   Resolving undeclared variables
+   Allocating nodes
+Graph information:
+   Observed stochastic nodes: 12
+   Unobserved stochastic nodes: 13
+   Total graph size: 166
+
+Initializing model
+
+Initializing model
+
+Compiling model graph
+   Resolving undeclared variables
+   Allocating nodes
+Graph information:
+   Observed stochastic nodes: 12
+   Unobserved stochastic nodes: 13
+   Total graph size: 166
+
+Compiling model graph
+   Resolving undeclared variables
+   Allocating nodes
+Graph information:
+   Observed stochastic nodes: 12
+   Unobserved stochastic nodes: 13
+   Total graph size: 166
+
+Compiling model graph
+   Resolving undeclared variables
+   Allocating nodes
+Graph information:
+   Observed stochastic nodes: 12
+   Unobserved stochastic nodes: 13
+   Total graph size: 166
+
+Initializing model
+
+Initializing model
+
+Initializing model
+

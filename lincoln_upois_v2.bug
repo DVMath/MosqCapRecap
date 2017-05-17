@@ -1,0 +1,24 @@
+
+model {
+
+for (t in 1:totT) {
+X[t] <- p
+Xu[t] <- p
+#Yu[t] ~ dbin(p, U)
+}
+
+theta <- sum(X[])
+thetau <- sum(Xu[])
+Ncapt ~ dpois(theta * N)
+Ucapt ~ dpois(thetau * U)
+
+Yu ~ dmulti(Xu, Ucapt)
+Y ~ dmulti(X, Ncapt)
+#U ~ dnegbin(l, v)
+U ~ dpois(v)
+
+#l ~ dbeta(2, 2)
+v ~ dgamma(0.01, 0.01)
+
+p ~ dbeta(2,4)
+}

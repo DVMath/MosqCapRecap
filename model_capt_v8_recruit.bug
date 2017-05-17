@@ -1,0 +1,56 @@
+
+model {
+
+for (t in 1:totT) {
+     X[t] <- pow(phi,t)*pow(1-p, t-1)*p
+# for unmarked p is counted below     
+     Xu[t] <- pow(phiu,t)*pow(1-p, t-1)
+}
+
+Ru[1] <- phiu
+for (t in 2:totT) {
+  Ru[t] <- Ru[t-1] + pow(phiu,t)*pow(1-p,t-1)
+}
+
+theta <- sum(X[])
+thetau <- sum(Xu[])
+Ncapt ~ dpois(theta* N)
+#Ut <- round(Nu*Xu)
+
+for (i in 1:totT) {
+  Ut[i] ~ dpois(Nu*Xu[i])
+}
+
+Y ~ dmulti(X, Ncapt)
+#b ~ dnorm(l, .1)
+#b <- l
+#bt <- round(b*Ru)
+
+for (i in 1:totT) {
+  bt[i] ~ dpois(l*Ru[i])
+}
+
+for (i in 1:totT) {  
+  Yu[i] ~ dbin(p, Ut[i]+bt[i])
+}
+#priors
+
+Nu ~ dgamma(0.001, 0.001)
+p ~ dbeta(2,2)
+phi ~ dbeta(4,2)
+#log(phiu/(1-phiu)) = 
+#logit(phiu) <- logit(phi) + log(f)
+#logit(phiu) <- logit(f*phi) 
+#phiu ~ dnorm(0.75, 1000)
+phiu ~ dbeta(2,2)
+totpup ~ dbin(1-phiu, round(4*U*fa))
+#probability of not being observed
+#l ~dgamma(0.001, 0.001)
+l ~ dlnorm(10, 1/4.0)
+
+#f ~ dgamma(0.001, 0.001)
+#f ~ dnorm(1,1)
+#f ~ dgamma(1.5, 1.0/.5)
+
+U <- Nu+l
+}
